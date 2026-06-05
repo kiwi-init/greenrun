@@ -61,8 +61,9 @@ jobs:
           ignore-unfixed: true
           limit-severities-for-sarif: true
           exit-code: "0"
-      - name: Upload vulnerability report
+      - name: Upload vulnerability report to code scanning
         uses: github/codeql-action/upload-sarif@v4
+        if: ${{ !github.event.repository.private }}
         continue-on-error: true
         with:
           sarif_file: trivy.sarif
