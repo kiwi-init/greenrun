@@ -67,7 +67,7 @@ jobs:
             test -f "greenrun-${target}.tar.gz"
           done
           sha256sum greenrun-*.tar.gz > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           files: |
             artifacts/greenrun-*.tar.gz
