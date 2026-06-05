@@ -1,0 +1,6 @@
+/greenrun
+/dist/
+/coverage/
+*.test
+*.out
+.DS_Store

@@ -1,0 +1,31 @@
+name: Basic
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: test -f README.md
+      - run: echo "hello from greenrun"
+
+  matrix:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        value: [one, two]
+    steps:
+      - run: test -n "${{ matrix.value }}"
+
+  service:
+    runs-on: ubuntu-24.04
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - run: docker ps

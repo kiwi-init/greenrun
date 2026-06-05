@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greenrun.sh/schema/result-v1.json",
+  "title": "Greenrun result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "source",
+    "status",
+    "fidelity",
+    "started_at",
+    "completed_at",
+    "duration_ms",
+    "repository",
+    "event",
+    "workflows",
+    "run_directory"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string"},
+    "source": {"enum": ["local", "github"]},
+    "status": {"enum": ["pass", "fail", "partial", "error", "cancelled"]},
+    "fidelity": {"enum": ["exact", "compatible", "approximate", "remote_only"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "duration_ms": {"type": "integer", "minimum": 0},
+    "repository": {"type": "object"},
+    "event": {"type": "object"},
+    "workflows": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "reproduce": {"type": "string"},
+    "run_directory": {"type": "string"},
+    "remote_url": {"type": "string"}
+  },
+  "additionalProperties": false
+}

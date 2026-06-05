@@ -1,0 +1,40 @@
+name: Compatibility
+
+on:
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  greenrun:
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture: [basic, advanced]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build -trimpath -o /tmp/greenrun ./cmd/greenrun
+      - name: Prepare fixture repository
+        run: |
+          cp -R "testdata/compat/${{ matrix.fixture }}" /tmp/fixture
+          cd /tmp/fixture
+          git init
+          git config user.name Greenrun
+          git config user.email greenrun@localhost
+          git add .
+          git commit -m fixture
+      - name: Run fixture
+        working-directory: /tmp/fixture
+        run: /tmp/greenrun --plain --event push --arch github
+      - name: Show canonical result
+        if: always()
+        working-directory: /tmp/fixture
+        run: /tmp/greenrun show latest --json

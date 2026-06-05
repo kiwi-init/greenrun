@@ -1,0 +1,52 @@
+name: Advanced
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      value: ${{ steps.local.outputs.echoed }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: local
+        uses: ./.github/actions/echo
+        with:
+          value: greenrun
+
+  consume:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    if: needs.prepare.outputs.value == 'greenrun'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - run: test "${{ needs.prepare.outputs.value }}" = greenrun
+      - uses: actions/cache@v5
+        with:
+          path: .greenrun-fixture-cache
+          key: fixture-${{ runner.os }}
+      - run: |
+          mkdir -p .greenrun-fixture-cache artifact
+          echo ok > artifact/result.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fixture-result
+          path: artifact/result.txt
+
+  container:
+    runs-on: ubuntu-22.04
+    container: node:24-bookworm-slim
+    timeout-minutes: 2
+    steps:
+      - run: node --version
+
+  call:
+    uses: ./.github/workflows/reusable.yml
+    with:
+      value: greenrun

@@ -1,0 +1,16 @@
+name: Echo
+description: Composite action fixture
+inputs:
+  value:
+    required: true
+outputs:
+  echoed:
+    value: ${{ steps.echo.outputs.value }}
+runs:
+  using: composite
+  steps:
+    - id: echo
+      shell: bash
+      run: |
+        echo "value=${{ inputs.value }}" >> "$GITHUB_OUTPUT"
+        echo "${{ inputs.value }}"

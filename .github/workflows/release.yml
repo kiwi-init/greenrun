@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            os: darwin
+            arch: arm64
+            runner: macos-15
+          - name: darwin-x64
+            os: darwin
+            arch: amd64
+            runner: macos-15
+          - name: linux-arm64
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - name: linux-x64
+            os: linux
+            arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o staging/greenrun ./cmd/greenrun
+      - name: Package
+        run: |
+          cp skills/greenrun/SKILL.md staging/SKILL.md
+          tar -czf "greenrun-${{ matrix.name }}.tar.gz" -C staging greenrun SKILL.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: greenrun-${{ matrix.name }}
+          path: greenrun-${{ matrix.name }}.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Verify and checksum
+        run: |
+          cd artifacts
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do
+            test -f "greenrun-${target}.tar.gz"
+          done
+          sha256sum greenrun-*.tar.gz > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/greenrun-*.tar.gz
+            artifacts/SHA256SUMS
+          generate_release_notes: true

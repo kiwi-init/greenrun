@@ -1,0 +1,14 @@
+name: Reusable
+
+on:
+  workflow_call:
+    inputs:
+      value:
+        required: true
+        type: string
+
+jobs:
+  reusable:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test -n "${{ inputs.value }}"
