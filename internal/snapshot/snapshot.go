@@ -41,7 +41,7 @@ func Create(ctx context.Context, repository model.Repository) (*Snapshot, error)
 			return nil, err
 		}
 	} else {
-		cmd := exec.CommandContext(ctx, "git", "clone", "--quiet", "--no-hardlinks", "--shared", repository.Root, root)
+		cmd := exec.CommandContext(ctx, "git", "clone", "--quiet", "--no-hardlinks", repository.Root, root)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("create isolated clone: %s", strings.TrimSpace(string(out)))
@@ -56,6 +56,12 @@ func Create(ctx context.Context, repository model.Repository) (*Snapshot, error)
 		}
 	}
 
+	if repository.RemoteURL != "" {
+		if err := configureOrigin(ctx, root, repository.RemoteURL); err != nil {
+			cleanup()
+			return nil, err
+		}
+	}
 	if err := executil.Run(ctx, root, "git", "config", "user.name", "Greenrun"); err != nil {
 		cleanup()
 		return nil, err
@@ -76,6 +82,19 @@ func Create(ctx context.Context, repository model.Repository) (*Snapshot, error)
 	}
 
 	return &Snapshot{Root: root, HeadSHA: head, cleanup: cleanup}, nil
+}
+
+func configureOrigin(ctx context.Context, root, remoteURL string) error {
+	if executil.Run(ctx, root, "git", "remote", "get-url", "origin") == nil {
+		if err := executil.Run(ctx, root, "git", "remote", "set-url", "origin", remoteURL); err != nil {
+			return fmt.Errorf("set snapshot origin: %w", err)
+		}
+		return nil
+	}
+	if err := executil.Run(ctx, root, "git", "remote", "add", "origin", remoteURL); err != nil {
+		return fmt.Errorf("add snapshot origin: %w", err)
+	}
+	return nil
 }
 
 func copyInitial(ctx context.Context, source, target string) error {

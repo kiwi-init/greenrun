@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kiwi-init/greenrun/internal/model"
@@ -23,7 +24,11 @@ func TestCreateIncludesWorkingTreeWithoutMutatingSource(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("after\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "untracked.txt"), []byte("new\n"), 0o644))
-	snapshot, err := Create(context.Background(), model.Repository{Root: root, HeadSHA: head})
+	snapshot, err := Create(context.Background(), model.Repository{
+		Root:      root,
+		HeadSHA:   head,
+		RemoteURL: "git@github.com:owner/repo.git",
+	})
 	require.NoError(t, err)
 	defer snapshot.Close()
 
@@ -38,6 +43,8 @@ func TestCreateIncludesWorkingTreeWithoutMutatingSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "after\n", string(source))
 	require.NotEmpty(t, snapshot.HeadSHA)
+	requireNoAlternates(t, snapshot.Root)
+	require.Equal(t, "git@github.com:owner/repo.git", gitOutput(t, snapshot.Root, "remote", "get-url", "origin"))
 }
 
 func TestCreateInitialRepositoryExcludesIgnoredFiles(t *testing.T) {
@@ -50,13 +57,27 @@ func TestCreateInitialRepositoryExcludesIgnoredFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "ignored.bin"), []byte("ignored\n"), 0o644))
 	runGit(t, root, "add", ".gitignore", "tracked.txt")
 
-	snapshot, err := Create(context.Background(), model.Repository{Root: root})
+	snapshot, err := Create(context.Background(), model.Repository{
+		Root:      root,
+		RemoteURL: "https://github.com/owner/repo.git",
+	})
 	require.NoError(t, err)
 	defer snapshot.Close()
 	_, err = os.Stat(filepath.Join(snapshot.Root, "tracked.txt"))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(snapshot.Root, "ignored.bin"))
 	require.True(t, os.IsNotExist(err))
+	require.Equal(t, "https://github.com/owner/repo.git", gitOutput(t, snapshot.Root, "remote", "get-url", "origin"))
+}
+
+func requireNoAlternates(t *testing.T, root string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".git", "objects", "info", "alternates"))
+	if os.IsNotExist(err) {
+		return
+	}
+	require.NoError(t, err)
+	require.Empty(t, strings.TrimSpace(string(data)))
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
