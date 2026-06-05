@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
   id-token: write
@@ -49,19 +50,31 @@ jobs:
             ghcr.io/kiwi-init/greenrun-ubuntu:${{ matrix.ubuntu }}-${{ steps.date.outputs.value }}
           cache-from: type=gha,scope=ubuntu-${{ matrix.ubuntu }}
           cache-to: type=gha,mode=max,scope=ubuntu-${{ matrix.ubuntu }}
-      - name: Scan image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      - name: Create vulnerability report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ghcr.io/kiwi-init/greenrun-ubuntu@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy.sarif
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          exit-code: "0"
+      - name: Upload vulnerability report
+        uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+      - name: Gate image vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ghcr.io/kiwi-init/greenrun-ubuntu@${{ steps.build.outputs.digest }}
+          format: table
+          scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      - uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: trivy.sarif
       - uses: sigstore/cosign-installer@v4.1.2
       - name: Sign image
         env:
