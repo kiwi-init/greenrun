@@ -11,6 +11,8 @@ runs:
   steps:
     - id: echo
       shell: bash
+      env:
+        VALUE: ${{ inputs.value }}
       run: |
-        echo "value=${{ inputs.value }}" >> "$GITHUB_OUTPUT"
-        echo "${{ inputs.value }}"
+        echo "value=$VALUE" >> "$GITHUB_OUTPUT"
+        echo "$VALUE"

@@ -11,4 +11,6 @@ jobs:
   reusable:
     runs-on: ubuntu-24.04
     steps:
-      - run: test -n "${{ inputs.value }}"
+      - run: test -n "$VALUE"
+        env:
+          VALUE: ${{ inputs.value }}
