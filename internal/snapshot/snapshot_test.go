@@ -27,7 +27,7 @@ func TestCreateIncludesWorkingTreeWithoutMutatingSource(t *testing.T) {
 	snapshot, err := Create(context.Background(), model.Repository{
 		Root:      root,
 		HeadSHA:   head,
-		RemoteURL: "git@github.com:owner/repo.git",
+		RemoteURL: "https://user:secret@github.com/owner/repo.git",
 	})
 	require.NoError(t, err)
 	defer snapshot.Close()
@@ -44,7 +44,7 @@ func TestCreateIncludesWorkingTreeWithoutMutatingSource(t *testing.T) {
 	require.Equal(t, "after\n", string(source))
 	require.NotEmpty(t, snapshot.HeadSHA)
 	requireNoAlternates(t, snapshot.Root)
-	require.Equal(t, "git@github.com:owner/repo.git", gitOutput(t, snapshot.Root, "remote", "get-url", "origin"))
+	require.Equal(t, "https://github.com/owner/repo.git", gitOutput(t, snapshot.Root, "remote", "get-url", "origin"))
 }
 
 func TestCreateInitialRepositoryExcludesIgnoredFiles(t *testing.T) {
@@ -59,7 +59,7 @@ func TestCreateInitialRepositoryExcludesIgnoredFiles(t *testing.T) {
 
 	snapshot, err := Create(context.Background(), model.Repository{
 		Root:      root,
-		RemoteURL: "https://github.com/owner/repo.git",
+		RemoteURL: "https://token@github.com/owner/repo.git",
 	})
 	require.NoError(t, err)
 	defer snapshot.Close()
@@ -68,6 +68,11 @@ func TestCreateInitialRepositoryExcludesIgnoredFiles(t *testing.T) {
 	_, err = os.Stat(filepath.Join(snapshot.Root, "ignored.bin"))
 	require.True(t, os.IsNotExist(err))
 	require.Equal(t, "https://github.com/owner/repo.git", gitOutput(t, snapshot.Root, "remote", "get-url", "origin"))
+}
+
+func TestSanitizeRemoteURLPreservesSSHRemotes(t *testing.T) {
+	require.Equal(t, "git@github.com:owner/repo.git", sanitizeRemoteURL("git@github.com:owner/repo.git"))
+	require.Equal(t, "ssh://git@github.com/owner/repo.git", sanitizeRemoteURL("ssh://git@github.com/owner/repo.git"))
 }
 
 func requireNoAlternates(t *testing.T, root string) {

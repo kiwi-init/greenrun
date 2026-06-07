@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,7 @@ func Create(ctx context.Context, repository model.Repository) (*Snapshot, error)
 }
 
 func configureOrigin(ctx context.Context, root, remoteURL string) error {
+	remoteURL = sanitizeRemoteURL(remoteURL)
 	if executil.Run(ctx, root, "git", "remote", "get-url", "origin") == nil {
 		if err := executil.Run(ctx, root, "git", "remote", "set-url", "origin", remoteURL); err != nil {
 			return fmt.Errorf("set snapshot origin: %w", err)
@@ -95,6 +97,20 @@ func configureOrigin(ctx context.Context, root, remoteURL string) error {
 		return fmt.Errorf("add snapshot origin: %w", err)
 	}
 	return nil
+}
+
+func sanitizeRemoteURL(remoteURL string) string {
+	parsed, err := url.Parse(remoteURL)
+	if err != nil || parsed.User == nil {
+		return remoteURL
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		parsed.User = nil
+		return parsed.String()
+	default:
+		return remoteURL
+	}
 }
 
 func copyInitial(ctx context.Context, source, target string) error {
