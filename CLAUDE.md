@@ -31,12 +31,20 @@ Do not introduce repository-specific Greenrun configuration. The workflows in
   local event without mutating the developer's checkout.
 - `internal/workflow` validates workflows, applies event/path/branch filters,
   classifies runners and secrets, and builds the execution plan.
+- `internal/history` ranks jobs by recorded failure rate and time-to-fail
+  (name heuristic as the cold-start prior) and learns from local and
+  imported runs.
 - `internal/engine` is the adapter to `nektos/act`, Docker, caches, artifacts,
-  logs, and cancellation.
+  logs, and cancellation. It schedules all pending jobs across workflows in
+  one global rank-ordered queue with weighted slots; the first failure
+  cancels everything unless `--complete` is set.
 - `internal/store`, `internal/output`, and `schema` define persisted evidence
   and agent-readable results.
 - `internal/githubrun` imports hosted GitHub Actions runs into the same result
-  model.
+  model; imports also train `internal/history`.
+- `internal/hook` owns the optional git pre-push hook (`greenrun hook`),
+  which lives in the git directory and never blocks on `partial` results or
+  Greenrun runtime errors.
 
 ## Common Commands
 
@@ -64,5 +72,6 @@ go run ./cmd/greenrun logs latest --failed
 - Tests should use tempdirs, fixture repos, and local state. Do not rely on live
   GitHub state unless a test explicitly covers hosted-run import behavior.
 - If a change touches event inference, changed-file logic, trigger filtering,
-  runner classification, log masking, or result status, add focused tests.
+  runner classification, job scheduling or ranking, log masking, or result
+  status, add focused tests.
 - For docs-only edits, tests may be unnecessary; say so when reporting.

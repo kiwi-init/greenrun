@@ -26,7 +26,7 @@ func TestCollectorNeverPersistsSecrets(t *testing.T) {
 	storage := &store.Store{Home: t.TempDir()}
 	run, err := storage.Start(model.Repository{Slug: "owner/repo", Identity: "id"})
 	require.NoError(t, err)
-	collector := newLogCollector(greenmask.New("seed-secret"), run, os.Stdout, true, false, nil, nil, nil, "")
+	collector := newLogCollector(greenmask.New("seed-secret"), run, os.Stdout, true, "ci", nil, nil, nil, "")
 
 	entry := &logrus.Entry{
 		Logger: logrus.New(), Context: context.Background(),
@@ -54,7 +54,7 @@ func TestCollectorMapsReusableJobEvidenceToCaller(t *testing.T) {
 		run,
 		os.Stdout,
 		true,
-		false,
+		"ci",
 		nil,
 		map[string]string{"child": "call"},
 		map[string]bool{"call": true},
@@ -86,7 +86,7 @@ func TestCollectorMapsUnknownReusableChildToSoleCaller(t *testing.T) {
 		run,
 		os.Stdout,
 		true,
-		false,
+		"ci",
 		nil,
 		nil,
 		map[string]bool{"call": true, "lint": true},

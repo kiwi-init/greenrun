@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kiwi-init/greenrun/internal/history"
 	"github.com/kiwi-init/greenrun/internal/model"
 	actmodel "github.com/nektos/act/pkg/model"
 	"github.com/stretchr/testify/require"
@@ -132,4 +133,32 @@ func findJob(workflow model.Workflow, id string) model.Job {
 		}
 	}
 	return model.Job{}
+}
+
+func TestRemoteStatsKeysIndexesEveryDisplayName(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".github", "workflows")
+	require.NoError(t, os.MkdirAll(path, 0o755))
+	content := `name: CI
+on: [push]
+jobs:
+  build:
+    name: Build It
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo build
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(path, "ci.yml"), []byte(content), 0o644))
+
+	index := RemoteStatsKeys(root)
+	require.Equal(t, history.Key("ci", "build"), index[history.RemoteKey("CI", "Build It")])
+	require.Equal(t, history.Key("ci", "build"), index[history.RemoteKey("CI", "build")])
+	require.Equal(t, history.Key("ci", "build"), index[history.RemoteKey(".github/workflows/ci.yml", "Build It")])
+	require.Equal(t, history.Key("ci", "test"), index[history.RemoteKey("CI", "test")])
+	// Matrix expansions fold into the base job name at lookup time.
+	require.Equal(t, history.Key("ci", "build"), index[history.RemoteKey("CI", "Build It (ubuntu-latest, 20)")])
 }

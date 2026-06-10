@@ -1,6 +1,6 @@
 # Compatibility
 
-Greenrun 1.0 supports GitHub Actions jobs that resolve entirely to
+Greenrun 1.x supports GitHub Actions jobs that resolve entirely to
 `ubuntu-latest`, `ubuntu-24.04`, or `ubuntu-22.04`.
 
 ## Supported

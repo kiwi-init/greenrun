@@ -21,4 +21,5 @@ Use Greenrun after making code changes when the repository contains
 7. Do not provide model API keys to Greenrun. It does not use an LLM.
 
 For a failed hosted run, use `greenrun github latest-failed`, then inspect it
-with the same `show` and `logs` commands.
+with the same `show` and `logs` commands. Imported runs also train the local
+scheduler, so the next `greenrun` probes the failing job first.

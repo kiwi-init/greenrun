@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/kiwi-init/greenrun/internal/history"
 	"github.com/kiwi-init/greenrun/internal/model"
 	actmodel "github.com/nektos/act/pkg/model"
 	"github.com/rhysd/actionlint"
@@ -386,6 +387,50 @@ func missingSecrets(content string, supplied map[string]string) []string {
 	}
 	sort.Strings(values)
 	return values
+}
+
+// RemoteStatsKeys maps the workflow and job names GitHub displays for
+// hosted runs to the history keys local runs record, so imported remote
+// evidence can train the local scheduler. Every display variant GitHub
+// may use (workflow name, file path, file ID; job name or job ID) is
+// indexed.
+func RemoteStatsKeys(root string) map[string]string {
+	index := map[string]string{}
+	workflowsDir := filepath.Join(root, ".github", "workflows")
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		return index
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || (filepath.Ext(entry.Name()) != ".yml" && filepath.Ext(entry.Name()) != ".yaml") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(workflowsDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		parsed, err := actmodel.ReadWorkflow(strings.NewReader(string(data)), false)
+		if err != nil {
+			continue
+		}
+		workflowID := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		workflowNames := []string{workflowID, ".github/workflows/" + entry.Name()}
+		if parsed.Name != "" {
+			workflowNames = append(workflowNames, parsed.Name)
+		}
+		for _, jobID := range parsed.GetJobIDs() {
+			jobNames := []string{jobID}
+			if name := parsed.GetJob(jobID).Name; name != "" {
+				jobNames = append(jobNames, name)
+			}
+			for _, workflowName := range workflowNames {
+				for _, jobName := range jobNames {
+					index[history.RemoteKey(workflowName, jobName)] = history.Key(workflowID, jobID)
+				}
+			}
+		}
+	}
+	return index
 }
 
 func rank(value string) float64 {

@@ -19,6 +19,7 @@ import (
 	"github.com/kiwi-init/greenrun/internal/executil"
 	"github.com/kiwi-init/greenrun/internal/githubrun"
 	"github.com/kiwi-init/greenrun/internal/history"
+	"github.com/kiwi-init/greenrun/internal/hook"
 	"github.com/kiwi-init/greenrun/internal/model"
 	"github.com/kiwi-init/greenrun/internal/output"
 	"github.com/kiwi-init/greenrun/internal/repo"
@@ -40,6 +41,7 @@ type app struct {
 	quiet      bool
 	eventName  string
 	arch       string
+	jobs       int
 	secretArgs []string
 	secretFile string
 }
@@ -88,11 +90,15 @@ func (a *app) rootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&a.quiet, "quiet", "q", false, "hide live workflow logs")
 	root.PersistentFlags().StringVar(&a.eventName, "event", "", "override the inferred GitHub event")
 	root.PersistentFlags().StringVar(&a.arch, "arch", "native", "runner architecture: native or github")
+	root.PersistentFlags().IntVarP(&a.jobs, "jobs", "j", 0, "maximum concurrent jobs across workflows (0 = auto-size to host)")
 	root.PersistentFlags().StringArrayVarP(&a.secretArgs, "secret", "s", nil, "provide NAME or NAME=value to workflow jobs")
 	root.PersistentFlags().StringVar(&a.secretFile, "secret-file", "", "explicit dotenv-style secrets file")
 	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
 		if a.arch != "native" && a.arch != "github" {
 			return fmt.Errorf("--arch must be native or github")
+		}
+		if a.jobs < 0 {
+			return fmt.Errorf("--jobs must be zero or positive")
 		}
 		return nil
 	}
@@ -128,7 +134,7 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 
 	root.AddCommand(
-		run, plan, show, logs, path, github,
+		run, plan, show, logs, path, github, a.hookCommand(),
 		&cobra.Command{Use: "warm", Short: "Pre-pull runner images", RunE: a.warm},
 		&cobra.Command{Use: "doctor", Short: "Check Greenrun prerequisites", RunE: a.doctor},
 		&cobra.Command{Use: "update", Short: "Install the latest verified release", RunE: a.update},
@@ -182,7 +188,7 @@ func (a *app) runLocal(cmd *cobra.Command, complete bool) error {
 	var executionErr error
 	if planErr == nil {
 		workflows, executionErr = engine.New(a.store).Execute(cmd.Context(), plan, snap.Root, eventPath, run, engine.Options{
-			Complete: complete, Quiet: a.quiet, Arch: a.arch, Secrets: secrets, Out: a.out,
+			Complete: complete, Quiet: a.quiet, Arch: a.arch, Secrets: secrets, Out: a.out, Jobs: a.jobs,
 		})
 	}
 	cancelled := errors.Is(cmd.Context().Err(), context.Canceled)
@@ -322,11 +328,72 @@ func (a *app) importGitHub(cmd *cobra.Command, reference string, watch, artifact
 	if err != nil {
 		return err
 	}
+	// Imported hosted evidence trains the same per-job stats that rank the
+	// local fail-fast queue, so a fresh clone can bootstrap its scheduler
+	// from remote history.
+	index := workflow.RemoteStatsKeys(repository.Root)
+	_ = history.UpdateWithKeys(a.store, result, func(remoteWorkflow model.Workflow, job model.Job) (string, bool) {
+		id, ok := index[history.RemoteKey(remoteWorkflow.Name, job.Name)]
+		return id, ok
+	})
 	output.New(a.out, a.errOut, a.plain).Result(result)
 	if result.Status == model.StatusPass {
 		return nil
 	}
 	return &exitError{code: model.ExitCode(result.Status), err: fmt.Errorf("remote run is %s", result.Status)}
+}
+
+func (a *app) hookCommand() *cobra.Command {
+	command := &cobra.Command{Use: "hook", Short: "Manage the local git pre-push hook"}
+	command.AddCommand(
+		&cobra.Command{
+			Use: "install", Short: "Run greenrun before every push from this machine",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				repository, err := repo.Discover(cmd.Context(), ".")
+				if err != nil {
+					return err
+				}
+				path, err := hook.Install(cmd.Context(), repository.Root)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(a.out, "installed pre-push hook at %s\n", path)
+				fmt.Fprintln(a.out, "pushes are blocked on local CI failure; partial results and runtime errors do not block")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "uninstall", Short: "Remove the greenrun pre-push hook",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				repository, err := repo.Discover(cmd.Context(), ".")
+				if err != nil {
+					return err
+				}
+				path, err := hook.Uninstall(cmd.Context(), repository.Root)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(a.out, "no greenrun pre-push hook remains at %s\n", path)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "status", Short: "Report the pre-push hook state",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				repository, err := repo.Discover(cmd.Context(), ".")
+				if err != nil {
+					return err
+				}
+				state, path, err := hook.Status(cmd.Context(), repository.Root)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(a.out, "%s  %s\n", state, path)
+				return nil
+			},
+		},
+	)
+	return command
 }
 
 func (a *app) warm(cmd *cobra.Command, _ []string) error {

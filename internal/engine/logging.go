@@ -2,7 +2,6 @@ package engine
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -20,15 +19,15 @@ import (
 )
 
 type logCollector struct {
-	masker    *greenmask.Masker
-	run       *store.Run
-	out       io.Writer
-	quiet     bool
-	failFast  bool
-	cancel    context.CancelFunc
-	aliases   map[string]string
-	knownJobs map[string]bool
-	fallback  string
+	masker     *greenmask.Masker
+	run        *store.Run
+	out        io.Writer
+	quiet      bool
+	workflowID string
+	onFailure  func(job string)
+	aliases    map[string]string
+	knownJobs  map[string]bool
+	fallback   string
 
 	mu          sync.Mutex
 	buffers     map[string]*bytes.Buffer
@@ -36,22 +35,21 @@ type logCollector struct {
 	finished    map[string]time.Time
 	steps       map[string]map[string]*model.Step
 	diagnostics map[string][]model.Diagnostic
-	failed      bool
-	failedJob   string
 }
 
 func newLogCollector(
 	masker *greenmask.Masker,
 	run *store.Run,
 	out io.Writer,
-	quiet, failFast bool,
-	cancel context.CancelFunc,
+	quiet bool,
+	workflowID string,
+	onFailure func(job string),
 	aliases map[string]string,
 	knownJobs map[string]bool,
 	fallback string,
 ) *logCollector {
 	return &logCollector{
-		masker: masker, run: run, out: out, quiet: quiet, failFast: failFast, cancel: cancel,
+		masker: masker, run: run, out: out, quiet: quiet, workflowID: workflowID, onFailure: onFailure,
 		buffers: map[string]*bytes.Buffer{}, started: map[string]time.Time{},
 		finished: map[string]time.Time{}, steps: map[string]map[string]*model.Step{},
 		diagnostics: map[string][]model.Diagnostic{}, aliases: aliases, knownJobs: knownJobs, fallback: fallback,
@@ -144,31 +142,13 @@ func (c *logCollector) Fire(entry *logrus.Entry) error {
 
 	failure := strings.EqualFold(fieldString(entry.Data["stepResult"]), "failure") ||
 		(entry.Level <= logrus.ErrorLevel && job != "greenrun")
-	if failure {
-		if !c.failed {
-			c.failedJob = job
-		}
-		c.failed = true
-		if c.failFast && c.cancel != nil {
-			c.cancel()
-		}
+	if failure && c.onFailure != nil {
+		c.onFailure(job)
 	}
 	_ = c.run.AppendEvent(model.EventRecord{
-		Time: now, Type: "log", Job: job, Step: step, Message: message,
+		Time: now, Type: "log", Workflow: c.workflowID, Job: job, Step: step, Message: message,
 	})
 	return nil
-}
-
-func (c *logCollector) FailedJob() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.failedJob
-}
-
-func (c *logCollector) Failed() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.failed
 }
 
 func (c *logCollector) HasJob(job string) bool {
